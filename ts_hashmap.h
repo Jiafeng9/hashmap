@@ -13,9 +13,10 @@ typedef struct ts_entry_t {
 // and the number of operations that it has run.
 typedef struct ts_hashmap_t {
    ts_entry_t **table;
-   int numOps;
-   int capacity;
-   int size;
+   int numOps;   
+   int capacity; // the capacity of the array, the size (number of entries stored)
+   int size;     
+   pthread_mutex_t *mutex; // Mutex to make the hashmap thread-safe
 } ts_hashmap_t;
 
 // function declarations
