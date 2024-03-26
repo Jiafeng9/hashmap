@@ -29,11 +29,13 @@ ts_hashmap_t *initmap(int capacity) {
     }
 
 
-    // Initialize the mutex
-    if (pthread_mutex_init(map->mutex, NULL) != 0) {
-      // Mutex initialization failed, clean up and return NULL
-        free(map->table); // Free the table
-        free(map);        // Free the hashmap
+     // Allocate and initialize the mutex
+    map->mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t)); // Allocate memory for the mutex
+    if (!map->mutex || pthread_mutex_init(map->mutex, NULL) != 0) {
+        // Mutex allocation or initialization failed, clean up and return NULL
+        if (map->mutex) free(map->mutex); // Check if mutex was allocated before freeing
+        free(map->table);
+        free(map);
         return NULL;
     }
 
@@ -53,18 +55,32 @@ ts_hashmap_t *initmap(int capacity) {
  * @return the value associated with the given key, or INT_MAX if key not found
  */
 int get(ts_hashmap_t *map, int key) {
+  if (!map) return INT_MAX;
   // TODO
-  pthread_mutex_init(map->mutex, NULL);
-  ts_entry_t temp =map->table[((unsigned int))%map->capacity];
-  while(!temp->next !=NULL){
-    if (temp->key ==key){
-      return key;
-    }
-    temp=temp->next;
+  pthread_mutex_lock(map->mutex);
+
+  //ts_entry_t temp =map->table[((unsigned int))%map->capacity];
+  // Calculate the index for the given key using a hash function
+
+  unsigned int index = (unsigned int)key % map->capacity;
+  ts_entry_t *temp = map->table[index];
+
+  while (temp != NULL) {
+        if (temp->key == key) {
+            // If the key is found, unlock the mutex and return the associated value
+            int value = temp->value;
+            pthread_mutex_unlock(map->mutex);
+            return value;
+        }
+        temp = temp->next;
   }
-  pthread_mutex_destroy(map->mutex);
-  return INT_MAX;
+ // Unlock the mutex if the key is not found
+    pthread_mutex_unlock(map->mutex);
+    return INT_MAX; // Return INT_MAX if the key is not found
 }
+
+
+
 
 /**
  * Associates a value associated with a given key.
@@ -74,20 +90,40 @@ int get(ts_hashmap_t *map, int key) {
  * @return old associated value, or INT_MAX if the key was new
  */
 int put(ts_hashmap_t *map, int key, int value) {
+  if (!map) return INT_MAX; //None
+
   // TODO
-  pthread_mutex_init(map->mutex, NULL);
-  ts_entry_t temp =map->table[((unsigned int))%map->capacity];
-  while(!temp->next !=NULL){
-    if (temp->key ==key){
-        temp->value =value;
+  pthread_mutex_lock(map->mutex);
+  
+  unsigned int index = (unsigned int)key % map->capacity;
+  ts_entry_t **temp = &(map->table[index]);// Use pointer to pointer for easy node addition
+
+  while(*temp!=NULL){
+    if ((*temp)->key ==key){
+        int old_value =(*temp)->value;
+        (*temp)->value =value;
+        pthread_mutex_unlock(map->mutex);
+        return old_value;
+
     }
-    temp=temp->next;
+    temp=&((*temp)->next);
   }
-  temp->key=key;
-  temp->value=value;
-  pthread_mutex_destroy(map->mutex);
-  return INT_MAX;
+
+  // add new node 
+    ts_entry_t *newNode = (ts_entry_t *)malloc(sizeof(ts_entry_t));
+    if (newNode != NULL) { 
+        newNode->key = key;
+        newNode->value = value;
+        newNode->next = NULL;
+        *temp = newNode; // connet the new node 
+    }
+
+    pthread_mutex_unlock(map->mutex);
+    return INT_MAX; // Return INT_MAX indicating that the key was new
 }
+
+
+
 
 /**
  * Removes an entry in the map
@@ -97,9 +133,13 @@ int put(ts_hashmap_t *map, int key, int value) {
  */
 int del(ts_hashmap_t *map, int key) {
   // TODO
-  pthread_mutex_init(map->mutex, NULL);
-  ts_entry_t temp =map->table[((unsigned int))%map->capacity];
-  while(!temp->next !=NULL){
+  pthread_mutex_lock(map->mutex);
+  
+  unsigned int index = (unsigned int)key % map->capacity;
+  ts_entry_t *temp = &(map->table[index]);// Use pointer to pointer for easy node addition
+
+
+  while(temp->!=NULL){
     if (temp->key ==key){
         temp->key ==temp->next->key
         temp->value ==temp->nest->value
@@ -146,7 +186,7 @@ void freeMap(ts_hashmap_t *map) {
         }
     }
     // Destroy the mutex
-    pthread_mutex_destroy(&map->mutex);
+    pthread_mutex_destroy(map->mutex);
 
     // Free the table of buckets
     free(map->table);
